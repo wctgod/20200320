@@ -1,4 +1,5 @@
 import sys
+import os
 import serial
 import serial.tools.list_ports
 from PyQt5 import QtWidgets
@@ -12,7 +13,7 @@ class Pyqt5_Serial(QtWidgets.QWidget, Ui_Form):
         super(Pyqt5_Serial, self).__init__()
         self.setupUi(self)
         self.init()
-        self.setWindowTitle("串口小助手")
+        self.setWindowTitle("海洋电磁文件在线传输系统")
         self.ser = serial.Serial()
         self.port_check()
 
@@ -21,6 +22,7 @@ class Pyqt5_Serial(QtWidgets.QWidget, Ui_Form):
         self.lineEdit.setText(str(self.data_num_received))
         self.data_num_sended = 0
         self.lineEdit_2.setText(str(self.data_num_sended))
+        # self.saveaddr.setText("E:\Data")
 
     def init(self):
         # 串口检测按钮
@@ -52,6 +54,14 @@ class Pyqt5_Serial(QtWidgets.QWidget, Ui_Form):
 
         # 清除接收窗口
         self.s2__clear_button.clicked.connect(self.receive_data_clear)
+
+        # 提取文件到指定路径
+        self.openButton.clicked.connect(self.file_open)
+        self.auto_Receive.stateChanged.connect(self.auto_receive)
+        self.copyButton.clicked.connect(self.copy_file)
+
+        # 扫描下位机文件
+        self.scanButton.clicked.connect(self.scan_file)
 
     # 串口检测
     def port_check(self):
@@ -86,13 +96,17 @@ class Pyqt5_Serial(QtWidgets.QWidget, Ui_Form):
             QMessageBox.critical(self, "Port Error", "此串口不能被打开！")
             return None
 
-        # 打开串口接收定时器，周期为2ms
-        self.timer.start(2)
-
         if self.ser.isOpen():
             self.open_button.setEnabled(False)
             self.close_button.setEnabled(True)
             self.formGroupBox1.setTitle("串口状态（已开启）")
+
+    def auto_receive(self):
+        # 打开串口接收定时器，周期为2ms
+        if self.auto_Receive.isChecked():
+            self.timer.start(2)
+        else:
+            self.timer.stop()
 
     # 关闭串口
     def port_close(self):
@@ -151,6 +165,7 @@ class Pyqt5_Serial(QtWidgets.QWidget, Ui_Form):
         if num > 0:
             data = self.ser.read(num)
             num = len(data)
+
             # hex显示
             if self.hex_receive.checkState():
                 out_s = ''
@@ -189,6 +204,36 @@ class Pyqt5_Serial(QtWidgets.QWidget, Ui_Form):
 
     def receive_data_clear(self):
         self.s2__receive_text.setText("")
+
+    def file_open(self):
+        file_name = self.fileDir.toPlainText()
+        in_str = 'mf_open("' + file_name + '",0x01)'
+        self.s3__send_text.setText(in_str)
+        in_str = (in_str + '\r\n').encode('utf-8')
+        self.ser.write(in_str)
+
+    def copy_file(self):
+        in_str = 'mf_read(90000)'
+        addr_text = self.saveaddr.toPlainText()
+        os.chdir(addr_text)
+        self.s3__send_text.setText(in_str)
+        in_str = (in_str + '\r\n').encode('utf-8')
+        self.ser.write(in_str)
+        while True:
+            num = self.ser.inWaiting()
+            if num > 0:
+                data = self.ser.read(num)
+                fd = os.open("20200318.txt", os.O_RDWR | os.O_CREAT)
+                os.write(fd, bytes(str(data), 'UTF-8'))
+                os.close(fd)
+            else:
+                break
+
+    def scan_file(self):
+        in_str = 'mf_scan_files("0:")'
+        self.s3__send_text.setText(in_str)
+        in_str = (in_str + '\r\n').encode('utf-8')
+        self.ser.write(in_str)
 
 
 if __name__ == '__main__':
